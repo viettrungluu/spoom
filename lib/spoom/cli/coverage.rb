@@ -17,17 +17,7 @@ module Spoom
       option :save, type: :string, lazy_default: DATA_DIR, desc: "Save snapshot data as json"
       def snapshot
         in_sorbet_project!
-
-        snapshot = Spoom::Coverage.snapshot(path: exec_path)
-
-        unless snapshot
-          say_error("Can't create snapshot")
-          exit(1)
-        end
-
-        snapshot.print
-
-        save_snapshot(snapshot: snapshot, save_dir: options[:save])
+        commit_snapshot(path: exec_path, save_dir: options[:save], bundle_install: options[:bundle_install])
       end
 
       desc "timeline", "Replay a project and collect metrics"
@@ -74,7 +64,13 @@ module Spoom
         ticks.each_with_index do |sha, i|
           date = Spoom::Git.commit_time(sha, path: path)
           puts "Analyzing commit #{sha} - #{date&.strftime('%F')} (#{i + 1} / #{ticks.size})"
-          commit_snapshot(sha: sha, path: path, save_dir: save_dir, bundle_install: options[:bundle_install])
+          commit_snapshot(
+            sha: sha,
+            path: path,
+            save_dir: save_dir,
+            bundle_install: options[:bundle_install],
+            indent_level: 2
+          )
         end
 
         Spoom::Git.checkout(sha_before, path: path)
@@ -161,8 +157,11 @@ module Spoom
           true
         end
 
-        def commit_snapshot(sha, path: '.', save_dir: nil, bundle_install: false)
-          Spoom::Git.checkout(sha, path: path)
+        def commit_snapshot(sha: nil, path: '.', save_dir: nil, bundle_install: false, indent_level: 0)
+          if sha
+            Spoom::Git.exec("git reset --hard", path: path)
+            Spoom::Git.checkout(sha, path: path)
+          end
 
           snapshot = T.let(nil, T.nilable(Spoom::Coverage::Snapshot))
           if bundle_install
@@ -175,8 +174,8 @@ module Spoom
           end
           return nil unless snapshot
 
-          snapshot.print(indent_level: 2)
-          puts "\n"
+          snapshot.print(indent_level: indent_level)
+          puts "\n" if sha
 
           save_snapshot(snapshot: snapshot, save_dir: save_dir)
 
