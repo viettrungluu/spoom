@@ -59,8 +59,6 @@ module Spoom
         end
 
         save_dir = options[:save]
-        FileUtils.mkdir_p(save_dir) if save_dir
-
         from = parse_time(options[:from], "--from")
         to = parse_time(options[:to], "--to")
 
@@ -81,28 +79,9 @@ module Spoom
         ticks.each_with_index do |sha, i|
           date = Spoom::Git.commit_time(sha, path: path)
           puts "Analyzing commit #{sha} - #{date&.strftime('%F')} (#{i + 1} / #{ticks.size})"
-
-          Spoom::Git.checkout(sha, path: path)
-
-          snapshot = T.let(nil, T.nilable(Spoom::Coverage::Snapshot))
-          if options[:bundle_install]
-            Bundler.with_clean_env do
-              next unless bundle_install(path, sha)
-              snapshot = Spoom::Coverage.snapshot(path: path)
-            end
-          else
-            snapshot = Spoom::Coverage.snapshot(path: path)
-          end
-          next unless snapshot
-
-          snapshot.print(indent_level: 2)
-          puts "\n"
-
-          next unless save_dir
-          file = "#{save_dir}/#{sha}.json"
-          File.write(file, snapshot.to_json)
-          puts "  Snapshot data saved under #{file}\n\n"
+          commit_snapshot(sha, path: path, save_dir: save_dir, bundle_install: options[:bundle_install])
         end
+
         Spoom::Git.checkout(sha_before, path: path)
       end
 
@@ -185,6 +164,32 @@ module Spoom
             return false
           end
           true
+        end
+
+        def commit_snapshot(sha, path: '.', save_dir: nil, bundle_install: false)
+          Spoom::Git.checkout(sha, path: path)
+
+          snapshot = T.let(nil, T.nilable(Spoom::Coverage::Snapshot))
+          if bundle_install
+            Bundler.with_clean_env do
+              return nil unless bundle_install(path, sha)
+              snapshot = Spoom::Coverage.snapshot(path: path)
+            end
+          else
+            snapshot = Spoom::Coverage.snapshot(path: path)
+          end
+          return nil unless snapshot
+
+          snapshot.print(indent_level: 2)
+          puts "\n"
+
+          return snapshot unless save_dir
+          FileUtils.mkdir_p(save_dir) if save_dir
+          file = "#{save_dir}/#{sha}.json"
+          File.write(file, snapshot.to_json)
+          puts "  Snapshot data saved under #{file}\n\n"
+
+          snapshot
         end
 
         def message_no_data(file)
