@@ -27,12 +27,7 @@ module Spoom
 
         snapshot.print
 
-        save_dir = options[:save]
-        return unless save_dir
-        FileUtils.mkdir_p(save_dir)
-        file = "#{save_dir}/#{snapshot.commit_sha || snapshot.timestamp}.json"
-        File.write(file, snapshot.to_json)
-        puts "\nSnapshot data saved under #{file}"
+        save_snapshot(snapshot: snapshot, save_dir: options[:save])
       end
 
       desc "timeline", "Replay a project and collect metrics"
@@ -79,7 +74,7 @@ module Spoom
         ticks.each_with_index do |sha, i|
           date = Spoom::Git.commit_time(sha, path: path)
           puts "Analyzing commit #{sha} - #{date&.strftime('%F')} (#{i + 1} / #{ticks.size})"
-          commit_snapshot(sha, path: path, save_dir: save_dir, bundle_install: options[:bundle_install])
+          commit_snapshot(sha: sha, path: path, save_dir: save_dir, bundle_install: options[:bundle_install])
         end
 
         Spoom::Git.checkout(sha_before, path: path)
@@ -183,13 +178,18 @@ module Spoom
           snapshot.print(indent_level: 2)
           puts "\n"
 
-          return snapshot unless save_dir
-          FileUtils.mkdir_p(save_dir) if save_dir
-          file = "#{save_dir}/#{sha}.json"
-          File.write(file, snapshot.to_json)
-          puts "  Snapshot data saved under #{file}\n\n"
+          save_snapshot(snapshot: snapshot, save_dir: save_dir)
 
           snapshot
+        end
+
+        def save_snapshot(snapshot:, save_dir:)
+          return unless save_dir
+          FileUtils.mkdir_p(save_dir)
+          name = snapshot.commit_sha || snapshot.timestamp
+          file = "#{save_dir}/#{name}.json"
+          File.write(file, snapshot.to_json)
+          puts "  Snapshot data saved under #{file}\n\n"
         end
 
         def message_no_data(file)
