@@ -11,13 +11,14 @@ module Spoom
   module Coverage
     extend T::Sig
 
-    sig { params(path: String).returns(Snapshot) }
+    sig { params(path: String).returns(T.nilable(Snapshot)) }
     def self.snapshot(path: '.')
-      snapshot = Snapshot.new
       metrics = Spoom::Sorbet.srb_metrics(path: path, capture_err: true)
-      return snapshot unless metrics
+      return nil unless metrics
 
       sha = Spoom::Git.last_commit(path: path)
+
+      snapshot = Snapshot.new
       snapshot.commit_sha = sha
       snapshot.commit_timestamp = Spoom::Git.commit_timestamp(sha, path: path).to_i if sha
 

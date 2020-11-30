@@ -18,8 +18,13 @@ module Spoom
       def snapshot
         in_sorbet_project!
 
-        path = exec_path
-        snapshot = Spoom::Coverage.snapshot(path: path)
+        snapshot = Spoom::Coverage.snapshot(path: exec_path)
+
+        unless snapshot
+          say_error("Can't create snapshot")
+          exit(1)
+        end
+
         snapshot.print
 
         save_dir = options[:save]
