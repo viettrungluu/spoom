@@ -349,6 +349,14 @@ module Spoom
         project.destroy
       end
 
+      def test_timeline_with_bundle_install
+        create_git_history
+        _, err, status = @project.bundle_exec("spoom coverage timeline --bundle-install --save data")
+        assert(status)
+        assert_empty(err)
+        assert_equal(3, Dir.glob("#{@project.path}/data/*.json").size)
+      end
+
       def test_report_outside_sorbet_dir
         @project.remove("sorbet/config")
         out, err, status = @project.bundle_exec("spoom coverage report --no-color")
