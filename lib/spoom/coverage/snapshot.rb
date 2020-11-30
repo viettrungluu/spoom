@@ -31,6 +31,17 @@ module Spoom
         printer.print_snapshot(self)
       end
 
+      sig { params(other: Snapshot, out: T.any(IO, StringIO), colors: T::Boolean, indent_level: Integer).void }
+      def print_diff(other, out: $stdout, colors: true, indent_level: 0)
+        printer = SnapshotPrinter.new(out: out, colors: colors, indent_level: indent_level)
+        printer.print_diff(self, other)
+      end
+
+      sig { params(path: String).returns(Snapshot) }
+      def self.from_file(path)
+        from_json(File.read(path))
+      end
+
       sig { params(json: String).returns(Snapshot) }
       def self.from_json(json)
         from_obj(JSON.parse(json))
@@ -110,6 +121,35 @@ module Spoom
         print_map(calls_map, calls)
       end
 
+      sig { params(a: Snapshot, b: Snapshot).void }
+      def print_diff(a, b)
+        printn
+        printl("Sigils:")
+        diff_sigils(a.sigils, b.sigils)
+        printn
+        printl("Methods:")
+        methods_mapA = {
+          "with signature" => a.methods_with_sig,
+          "without signature" => a.methods_without_sig,
+        }
+        methods_mapB = {
+          "with signature   " => b.methods_with_sig,
+          "without signature" => b.methods_without_sig,
+        }
+        diff_map(methods_mapA, methods_mapB)
+        printn
+        printl("Calls:")
+        calls_mapA = {
+          "typed  " => a.calls_typed,
+          "untyped" => a.calls_untyped,
+        }
+        calls_mapB = {
+          "typed  " => b.calls_typed,
+          "untyped" => b.calls_untyped,
+        }
+        diff_map(calls_mapA, calls_mapB)
+      end
+
       private
 
       sig { params(hash: T::Hash[String, Integer], total: Integer).void }
@@ -126,6 +166,40 @@ module Spoom
       def percent(value, total)
         return "" if value.nil? || total.nil? || total == 0
         " (#{(value.to_f * 100.0 / total.to_f).round}%)"
+      end
+
+      sig { params(title: String, a: Integer, b: Integer).void }
+      def diff_line(title, a, b)
+        diff = b - a
+        str = if diff > 0
+          colorize("+#{diff}", :green)
+        elsif diff < 0
+          colorize(diff.to_s, :red)
+        else
+          colorize(diff.to_s, :light_black)
+        end
+        printl("#{title}\t#{a}\t#{b}\t#{str}")
+      end
+
+      sig { params(a: T::Hash[String, Integer], b: T::Hash[String, Integer]).void }
+      def diff_sigils(a, b)
+        indent
+        Spoom::Sorbet::Sigils::VALID_STRICTNESS.each do |k|
+          next if k == Spoom::Sorbet::Sigils::STRICTNESS_INTERNAL
+          title = k
+          title = "#{title}\t" if title.size < 6
+          diff_line(title, a.fetch(k, 0), b.fetch(k, 0))
+        end
+        dedent
+      end
+
+      sig { params(a: T::Hash[String, Integer], b: T::Hash[String, Integer]).void }
+      def diff_map(a, b)
+        indent
+        a.keys.each do |k|
+          diff_line(k, a.fetch(k, 0), b.fetch(k, 0))
+        end
+        dedent
       end
     end
   end

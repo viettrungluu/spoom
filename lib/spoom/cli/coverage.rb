@@ -15,9 +15,14 @@ module Spoom
 
       desc "snapshot", "Run srb tc and display metrics"
       option :save, type: :string, lazy_default: DATA_DIR, desc: "Save snapshot data as json"
-      def snapshot
+      def snapshot(commit = nil)
         in_sorbet_project!
-        commit_snapshot(path: exec_path, save_dir: options[:save], bundle_install: options[:bundle_install])
+        commit_snapshot(
+          sha: commit,
+          path: exec_path,
+          save_dir: options[:save],
+          bundle_install: options[:bundle_install]
+        )
       end
 
       desc "timeline", "Replay a project and collect metrics"
@@ -61,6 +66,32 @@ module Spoom
         end
 
         Spoom::Git.checkout(sha_before, path: path)
+      end
+
+      desc "diff", "Compare snapshot metrics between two commits"
+      option :data, type: :string, default: DATA_DIR, desc: "Snapshots JSON data"
+      def diff(commitA, commitB)
+        in_sorbet_project!
+
+        data_dir = options[:data]
+        filesA = Dir.glob("#{data_dir}/#{commitA}.json")
+        if filesA.empty?
+          message_no_data_for_commit(data_dir, commitA)
+          exit(1)
+        end
+        filesB = Dir.glob("#{data_dir}/#{commitB}.json")
+        if filesB.empty?
+          message_no_data_for_commit(data_dir, commitB)
+          exit(1)
+        end
+
+        snapshotA = Spoom::Coverage::Snapshot.from_file(T.must(filesA.first))
+        snapshotB = Spoom::Coverage::Snapshot.from_file(T.must(filesB.first))
+
+        puts "Metrics evolution between #{colorize(commitA, :blue)} and #{colorize(commitB, :blue)}:"
+        snapshotA.print_diff(snapshotB)
+        # TODO check checkout
+        # TODO check reset
       end
 
       desc "report", "Produce a typing coverage report"
@@ -166,7 +197,12 @@ module Spoom
         def commit_snapshot(sha: nil, path: '.', save_dir: nil, bundle_install: false, indent_level: 0)
           if sha
             Spoom::Git.exec("git reset --hard", path: path)
-            Spoom::Git.checkout(sha, path: path)
+            _, err, status = Spoom::Git.checkout(sha, path: path)
+            unless status
+              say_error("Can't checkout commit #{colorize(sha, :blue)}\n")
+              $stderr.puts err
+              exit(1)
+            end
           end
 
           snapshot = T.let(nil, T.nilable(Spoom::Coverage::Snapshot))
@@ -199,12 +235,22 @@ module Spoom
 
         def message_no_data(file)
           say_error("No snapshot files found in #{colorize(file, :blue)}")
-          $stderr.puts <<~OUT
+          $stderr.puts(
+            "\nIf you already generated snapshot files under another directory use " \
+            "#{colorize('spoom coverage report --data PATH', :blue)}." \
+            "\nTo generate snapshot files run " \
+            "#{colorize('spoom coverage timeline --save-dir spoom_data', :blue)}."
+          )
+        end
 
-            If you already generated snapshot files under another directory use #{colorize('spoom coverage report PATH', :blue)}.
-
-            To generate snapshot files run #{colorize('spoom coverage timeline --save-dir spoom_data', :blue)}.
-          OUT
+        def message_no_data_for_commit(file, commit)
+          say_error("No snapshot file for commit #{colorize(commit, :blue)} in #{colorize(file, :blue)}")
+          $stderr.puts(
+            "\nIf you already generated snapshot files under another directory use " \
+            "#{colorize('spoom coverage diff --data PATH', :blue)}." \
+            "\nTo generate snapshot files run " \
+            "#{colorize('spoom coverage --save-dir spoom_data', :blue)}."
+          )
         end
       end
     end
