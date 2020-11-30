@@ -29,20 +29,7 @@ module Spoom
         in_sorbet_project!
         path = exec_path
 
-        sha_before = Spoom::Git.last_commit(path: path)
-        unless sha_before
-          say_error("Not in a git repository")
-          $stderr.puts "\nSpoom needs to checkout into your previous commits to build the timeline."
-          exit(1)
-        end
-
-        unless Spoom::Git.workdir_clean?(path: path)
-          say_error("Uncommited changes")
-          $stderr.puts "\nSpoom needs to checkout into your previous commits to build the timeline."
-          $stderr.puts "\nPlease git commit or git stash your changes then try again."
-          exit(1)
-        end
-
+        sha_before = check_git(path: path)
         save_dir = options[:save]
         from = parse_time(options[:from], "--from")
         to = parse_time(options[:to], "--to")
@@ -155,6 +142,25 @@ module Spoom
             return false
           end
           true
+        end
+
+        def check_git(path: '.')
+          sha = Spoom::Git.last_commit(path: path)
+
+          unless sha
+            say_error("Not in a git repository")
+            $stderr.puts "\nSpoom needs to checkout into your previous commits to build the timeline."
+            exit(1)
+          end
+
+          unless Spoom::Git.workdir_clean?(path: path)
+            say_error("Uncommited changes")
+            $stderr.puts "\nSpoom needs to checkout into your previous commits to build the timeline."
+            $stderr.puts "\nPlease git commit or git stash your changes then try again."
+            exit(1)
+          end
+
+          sha
         end
 
         def commit_snapshot(sha: nil, path: '.', save_dir: nil, bundle_install: false, indent_level: 0)
