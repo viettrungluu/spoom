@@ -43,6 +43,7 @@ module Spoom
         in_sorbet_project!
         path = exec_path
         sorbet = options[:sorbet]
+        save_dir = options[:save]
 
         sha_before = Spoom::Git.last_commit(path: path)
         unless sha_before
@@ -61,9 +62,6 @@ module Spoom
           ERR
           exit(1)
         end
-
-        save_dir = options[:save]
-        FileUtils.mkdir_p(save_dir) if save_dir
 
         from = parse_time(options[:from], "--from")
         to = parse_time(options[:to], "--to")
@@ -103,6 +101,8 @@ module Spoom
           say("\n")
 
           next unless save_dir
+
+          FileUtils.mkdir_p(save_dir)
           file = "#{save_dir}/#{sha}.json"
           File.write(file, snapshot.to_json)
           say("  Snapshot data saved under `#{file}`\n\n")
